@@ -277,7 +277,7 @@ void loop() {
                 stop_timer();   // остановить таймер
                 clear_temp_password();  // очистить временный пароль
                 timer_expired = false;  // время на ввод пароля не истек
-                
+                alarm = false;      // снять предупреждение // см для чего нужно в чтении геркона
                 clear_signal(); // выключить пьезоизлучатель
             } else {
                 clear_temp_password();
@@ -299,20 +299,24 @@ void loop() {
             if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0] || hour == end[0] && mins <= end[1]) {
                 PORTD |= (1<<LED);
                 bool rd = reed_switch_status();
-                
                 // Если открылась дверь
                 if(rd != prev && rd == false) { 
                     prev = rd;
                     mode = 4;
-                    clear_temp_password();
-                    start_timer();
-                    delay(200);
+                    // Если открылась, то зафиксировать, чтобы не очищался каждый раз пароль
+                    if(!alarm) {
+                        alarm = true;
+                        clear_temp_password();      // очистить, если в первый раз вызвалось, чтобы не очищалось при каждом..
+                        // ..открытии двери
+                    }
+                    start_timer();  // Начать отсчет
+                    delay(200);     // задержка, чтобы дребезг не фиксировать
                     lcd.clear();
                 }
-                
+                // Если дверь закрыли
                 if(rd != prev && rd == true) {
                     prev = rd;
-                    delay(200);
+                    delay(200); // задержка, чтобы дребезг не фиксировать
                 }
             }
         }        
@@ -950,4 +954,30 @@ void updateSerial() {
     while (Serial.available()) {
         Serial.read();
     }
+}
+
+// Функции для работы с EEPROM
+void EEPROM_write(unsigned int uiAddress, unsigned char ucData)
+{
+    /* Wait for completion of previous write */
+    while(EECR & (1<<EEPE));
+    /* Set up address and Data Registers */
+    EEAR = uiAddress;
+    EEDR = ucData;
+    /* Write logical one to EEMPE */
+    EECR |= (1<<EEMPE);
+    /* Start eeprom write by setting EEPE */
+    EECR |= (1<<EEPE);
+}
+
+unsigned char EEPROM_read(unsigned int uiAddress)
+{
+/* Wait for completion of previous write */
+    while(EECR & (1<<EEPE));
+    /* Set up address register */
+    EEAR = uiAddress;
+    /* Start eeprom read by writing EERE */
+    EECR |= (1<<EERE);
+    /* Return data from Data Register */
+    return EEDR;
 }
