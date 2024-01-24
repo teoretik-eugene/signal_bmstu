@@ -20,6 +20,9 @@
 #define LED PD4
 #define PIN_LED PIND
 
+#define BUZZ PD3
+#define PORT_BUZZ PORTD
+
 // true - нажаты, false - отжаты
 bool pls_btn = false;
 bool min_btn = false;
@@ -48,6 +51,9 @@ bool prev = false;
 
 bool alarm = false;
 
+bool setting_flag = false;
+
+bool signal_flag = false;
 
 /*
     TODO:
@@ -91,16 +97,17 @@ bool timer_expired = false;
 ISR(TIMER1_COMPA_vect) {
     sec_timer++;
 
+    // Если время на ввод пароля истек, то воспроизвести звук излучателя
     if(timer_expired) {
         if(sec_timer == 1) {
-
+            PORT_BUZZ |= (1<<BUZZ);
         }
         if(sec_timer == 4) {
-
+            PORT_BUZZ &= ~(1<<BUZZ);
             sec_timer = 0;
         }
     } else {
-        if(sec_timer == 30) {
+        if(sec_timer == 15) {
             timer_expired = true;
             sec_timer = 0;
             OCR1A = 7812;
@@ -117,8 +124,8 @@ void setup() {
     DDRD &= ~(1<<PD2);
     PORTD |= (1<<PD2);
 
-    DDRD |= (1<<LED);
-    PORTD &= ~(1<<LED);
+    DDRD |= (1<<LED) | (1<<BUZZ);
+    PORTD &= ~((1<<LED) | (1<<BUZZ));
     //Serial.begin(9600);
 
     //previous = reed_switch_status();
@@ -152,7 +159,13 @@ void loop() {
         /*
             Ввод пароля
         */
-
+        if(!signal_flag) {
+            signal_flag = true;
+            setting_flag = false;
+            clear_temp_password();
+        }
+        
+        // Функция для отображения интерфейса ввода пароля
         enter_password();
         // Кнопка +
         if(~PIN_BUTTON & (1<<PLUS_BUTTON) && !pls_btn) {
@@ -257,17 +270,20 @@ void loop() {
         // Обработка кнопки - ок
         if(~PIN_BUTTON & (1<<OK_BUTTON) && !ok_btn) {
             ok_btn = true;
+            // Если пароль верный
             if(check_password()) {
                 lcd.clear();
-                mode = 1;
-                stop_timer();
-                clear_temp_password();
-                timer_expired = false;
-                current_cursor = 0;
-                clear_signal();
+                mode = 1;   // 
+                stop_timer();   // остановить таймер
+                clear_temp_password();  // очистить временный пароль
+                timer_expired = false;  // время на ввод пароля не истек
+                
+                clear_signal(); // выключить пьезоизлучатель
             } else {
                 clear_temp_password();
             }
+            current_cursor = 0;
+            //signal_flag = false;
         }
 
         if(PIN_BUTTON & (1<<OK_BUTTON) && ok_btn) {
@@ -283,15 +299,17 @@ void loop() {
             if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0] || hour == end[0] && mins <= end[1]) {
                 PORTD |= (1<<LED);
                 bool rd = reed_switch_status();
+                
                 // Если открылась дверь
                 if(rd != prev && rd == false) { 
                     prev = rd;
                     mode = 4;
+                    clear_temp_password();
                     start_timer();
                     delay(200);
                     lcd.clear();
                 }
-                // выключает систему
+                
                 if(rd != prev && rd == true) {
                     prev = rd;
                     delay(200);
@@ -355,7 +373,6 @@ void loop() {
     }
 
     // Показ интервала
-    // TODO: показ пароля
     if(mode == 2) {
 
         // Вывод на экран
@@ -419,10 +436,7 @@ void loop() {
         lcd.print("*");
         //lcd.setCursor(15, 1);
         //lcd.print("*");
-        if(current_cursor <= 3)
-            show_time_param();
-        else
-            show_password_param();
+        show_time_param();
 
         lcd.setCursor(15, 0);
         lcd.print("*");
@@ -459,34 +473,6 @@ void loop() {
                         end[1]++;
                     else
                         end[1] = 0;
-                    break;
-                }
-                case 4: {
-                    if(temp_password[0] + 1 < 10)
-                        temp_password[0]++;
-                    else
-                        temp_password[0] = 0;
-                    break;
-                }
-                case 5: {
-                    if(temp_password[1] + 1 < 10)
-                        temp_password[1]++;
-                    else
-                        temp_password[1] = 0;
-                    break;
-                }
-                case 6: {
-                    if(temp_password[2] + 1 < 10)
-                        temp_password[2]++;
-                    else
-                        temp_password[2] = 0;
-                    break;
-                }
-                case 7: {
-                    if(temp_password[3] + 1 < 10)
-                        temp_password[3]++;
-                    else
-                        temp_password[3] = 0;
                     break;
                 }
             }
@@ -530,34 +516,6 @@ void loop() {
                         end[1] = 59;
                     break;
                 }
-                case 4: {
-                    if(temp_password[0] - 1 >= 0)
-                        temp_password[0]--;
-                    else
-                        temp_password[0] = 9;
-                    break;
-                }
-                case 5: {
-                    if(temp_password[1] - 1 >= 0)
-                        temp_password[1]--;
-                    else
-                        temp_password[1] = 9;
-                    break;
-                }
-                case 6: {
-                    if(temp_password[2] - 1 >= 0)
-                        temp_password[2]--;
-                    else
-                        temp_password[2] = 9;
-                    break;
-                }
-                case 7: {
-                    if(temp_password[3] - 1 >= 0)
-                        temp_password[3]--;
-                    else
-                        temp_password[3] = 9;
-                    break;
-                }
             }
         }
 
@@ -568,7 +526,7 @@ void loop() {
         // Кнопка set
         if(~PIN_BUTTON & (1<<SET_BUTTON) && !set_btn) {
             set_btn = true;
-            if(current_cursor + 1 < 8)
+            if(current_cursor + 1 < 4)
                 current_cursor++;
             else{
                 current_cursor = 0; 
@@ -583,7 +541,6 @@ void loop() {
         if(~PIN_BUTTON & (1<<OK_BUTTON) && !ok_btn) {
             ok_btn = true;
             current_cursor = 0;     // установка курсора по умолчанию
-            update_password();
             mode = 2;
             lcd.clear();
         }
@@ -592,6 +549,13 @@ void loop() {
 
     // Режим настройки RTC + пароля
     if(mode == 9) {
+
+        // во временный пароль ззаносится реальный пароль, а по окончании настройки, временный будет очищен
+        if(!setting_flag) {
+            update_temp_password();
+            setting_flag = true;
+        }
+
         if(current_cursor < 3) {
             show_time_setings(hour_temp, mins_temp, sec_temp);
         } else {
@@ -762,7 +726,8 @@ void loop() {
             set_time(hour_temp, mins_temp, sec_temp);       // установить время
             update_password();
             lcd.clear();
-            //update_temp_password();
+            clear_temp_password();
+            setting_flag = false;
         }
     }
 }
@@ -938,8 +903,9 @@ void clear_temp_password() {
     temp_password[3] = 0;
 }
 
+// Функция для отключения сигнализации
 void clear_signal() {
-    
+    PORT_BUZZ &= ~(1<<BUZZ);
 }
 
 void start_timer() {
