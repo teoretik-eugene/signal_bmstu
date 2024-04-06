@@ -126,7 +126,8 @@ void setup() {
 
     DDRD |= (1<<LED) | (1<<BUZZ);
     PORTD &= ~((1<<LED) | (1<<BUZZ));
-    //Serial.begin(9600);
+    //gsss
+    Serial.begin(9600);
 
     //previous = reed_switch_status();
     //prev = reed_switch_status();
@@ -140,6 +141,7 @@ void setup() {
     lcd.clear();
     sei();
     ds_init();
+    eeprom_init();
 }
 
 void loop() {
@@ -266,7 +268,7 @@ void loop() {
         if(PIN_BUTTON & (1<<SET_BUTTON) && set_btn) {
             set_btn = false;
         }
-
+        //////////////////
         // Обработка кнопки - ок
         if(~PIN_BUTTON & (1<<OK_BUTTON) && !ok_btn) {
             ok_btn = true;
@@ -546,6 +548,7 @@ void loop() {
             ok_btn = true;
             current_cursor = 0;     // установка курсора по умолчанию
             mode = 2;
+            eeprom_save_first_interval(start[0], start[1], end[0], end[1]);     // сохранить интервал в EEPROM
             lcd.clear();
         }
 
@@ -980,4 +983,36 @@ unsigned char EEPROM_read(unsigned int uiAddress)
     EECR |= (1<<EERE);
     /* Return data from Data Register */
     return EEDR;
+}
+
+// Первый интервал
+// 0x06 - часы первого 
+// 0x07 - минуты первого 
+// 0x08 - часы второго
+// 0x09 - минуты второго
+
+void eeprom_init() {
+    int num = EEPROM_read(0x06);
+    if(num >=0 && num < 25)
+        start[0] = num;
+
+    num = EEPROM_read(0x07);
+    if(num >=0 && num < 60)
+        start[1] = num;
+
+    num = EEPROM_read(0x08);
+    if(num >=0 && num < 25)
+        end[0] = num;
+    
+    num = EEPROM_read(0x09);
+    if(num >=0 && num < 60)
+        end[1] = num;
+    
+}
+
+void eeprom_save_first_interval(uint8_t f_hour, uint8_t f_min, uint8_t s_hour, uint8_t s_min) {
+    EEPROM_write(0x06, f_hour);
+    EEPROM_write(0x07, f_min);
+    EEPROM_write(0x08, s_hour);
+    EEPROM_write(0x09, s_min);
 }
