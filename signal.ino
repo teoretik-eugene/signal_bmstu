@@ -301,11 +301,11 @@ void loop() {
     }
 
     // Если охранная система включена
-    if(security_sys) {
+    if(security_sys && !alarm) {
         get_time();     // получает текущее время
         // Если начло интервала больше чем конец
         if(start[0] > end[0]) {
-            if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0] || hour == end[0] && mins < end[1]) {
+            if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0]) {
                 PORTD |= (1<<LED);
                 bool rd = reed_switch_status();
                 // Если открылась дверь
@@ -335,13 +335,37 @@ void loop() {
             Если начало интервала меньше чем окончание
         */
         if(start[0] < end[0]) {
-            if(hour == start[0] && mins >= start[1] || hour > start[0] && hour < end[0] || hour == end[0] && mins < end[1]) {
-                
+            if(hour == start[0] && mins >= start[1] || hour > start[0] && hour < end[0]) {
+                PORTD |= (1<<LED);
+                bool rd = reed_switch_status();
+                // Если открылась дверь
+                if(rd != prev && rd == false) { 
+                    prev = rd;
+                    mode = 4;
+                    // Если открылась, то зафиксировать, чтобы не очищался каждый раз пароль
+                    if(!alarm) {
+                        alarm = true;
+                        clear_temp_password();      // очистить, если в первый раз вызвалось, чтобы не очищалось при каждом..
+                        // ..открытии двери
+                        start_timer();  // Начать отсчет
+                    }
+                    delay(200);     // задержка, чтобы дребезг не фиксировать
+                    lcd.clear();
+                }
+                // Если дверь закрыли
+                if(rd != prev && rd == true) {
+                    prev = rd;
+                    delay(200); // задержка, чтобы дребезг не фиксировать
+                }
+            } else {
+                PORTD &= ~(1<<LED);
             }
         }       
     } else {
-        prev = true;
-        PORTD &= ~(1<<LED);
+        if(!alarm) {
+            prev = true;
+            PORTD &= ~(1<<LED);
+        }
     }
 
     // Общее - показывает текущее время
@@ -1058,5 +1082,8 @@ void eeprom_save_password() {
 }
 
 void eeprom_save_security_flag() {
-    EEPROM_write(0x0E, security_sys);
+    if(security_sys)
+        EEPROM_write(0x0E, 1);
+    else
+        EEPROM_write(0x0E, 0);
 }
