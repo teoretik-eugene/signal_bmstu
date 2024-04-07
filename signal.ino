@@ -142,6 +142,8 @@ void setup() {
     sei();
     ds_init();
     eeprom_init();
+
+
 }
 
 void loop() {
@@ -160,6 +162,10 @@ void loop() {
     if(mode == 4) {
         /*
             Ввод пароля
+        */
+        /*
+            Этот if нужен для того, чтобы флаги и функции выполнились в этом режиме только один раз, иначе будет постоянно
+            очищаться пароль через функцию 
         */
         if(!signal_flag) {
             signal_flag = true;
@@ -297,8 +303,9 @@ void loop() {
     // Если охранная система включена
     if(security_sys) {
         get_time();     // получает текущее время
+        // Если начло интервала больше чем конец
         if(start[0] > end[0]) {
-            if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0] || hour == end[0] && mins <= end[1]) {
+            if(hour == start[0] && mins >= start[1] || hour > start[0] || hour < end[0] || hour == end[0] && mins < end[1]) {
                 PORTD |= (1<<LED);
                 bool rd = reed_switch_status();
                 // Если открылась дверь
@@ -310,8 +317,8 @@ void loop() {
                         alarm = true;
                         clear_temp_password();      // очистить, если в первый раз вызвалось, чтобы не очищалось при каждом..
                         // ..открытии двери
+                        start_timer();  // Начать отсчет
                     }
-                    start_timer();  // Начать отсчет
                     delay(200);     // задержка, чтобы дребезг не фиксировать
                     lcd.clear();
                 }
@@ -320,8 +327,18 @@ void loop() {
                     prev = rd;
                     delay(200); // задержка, чтобы дребезг не фиксировать
                 }
+            } else {
+                PORTD &= ~(1<<LED);
             }
-        }        
+        } 
+        /*
+            Если начало интервала меньше чем окончание
+        */
+        if(start[0] < end[0]) {
+            if(hour == start[0] && mins >= start[1] || hour > start[0] && hour < end[0] || hour == end[0] && mins < end[1]) {
+                
+            }
+        }       
     } else {
         prev = true;
         PORTD &= ~(1<<LED);
@@ -427,6 +444,7 @@ void loop() {
         if(~PIN_BUTTON & (1<<OK_BUTTON) && !ok_btn) {
             ok_btn = true;
             security_sys = !security_sys;
+            //eeprom_save_security_flag();
         }
 
         if(PIN_BUTTON & (1<<OK_BUTTON) && ok_btn) {
@@ -705,7 +723,6 @@ void loop() {
             min_btn = false;
         }
 
-
         // Кнопка settings
         if((~PIN_BUTTON & (1<<SET_BUTTON)) && !set_btn) {
             set_btn = true;
@@ -724,7 +741,6 @@ void loop() {
             set_btn = false;
         }
 
-
         // Кнопка ОК
         if((~PIN_BUTTON & (1<<OK_BUTTON)) && !ok_btn) {
             ok_btn = true;
@@ -735,6 +751,8 @@ void loop() {
             lcd.clear();
             clear_temp_password();
             setting_flag = false;
+
+            eeprom_save_password();
         }
     }
 }
@@ -1008,6 +1026,21 @@ void eeprom_init() {
     if(num >=0 && num < 60)
         end[1] = num;
     
+    // Чтение пароля из EEPROM
+    num = EEPROM_read(0x0A);
+    password[0] = num;
+
+    num = EEPROM_read(0x0B);
+    password[1] = num;
+
+    num = EEPROM_read(0x0C);
+    password[2] = num;
+
+    num = EEPROM_read(0x0D);
+    password[3] = num;
+
+    update_temp_password();
+
 }
 
 void eeprom_save_first_interval(uint8_t f_hour, uint8_t f_min, uint8_t s_hour, uint8_t s_min) {
@@ -1015,4 +1048,15 @@ void eeprom_save_first_interval(uint8_t f_hour, uint8_t f_min, uint8_t s_hour, u
     EEPROM_write(0x07, f_min);
     EEPROM_write(0x08, s_hour);
     EEPROM_write(0x09, s_min);
+}
+
+void eeprom_save_password() {
+    EEPROM_write(0x0A, password[0]);
+    EEPROM_write(0x0B, password[1]);
+    EEPROM_write(0x0C, password[2]);
+    EEPROM_write(0x0D, password[3]);
+}
+
+void eeprom_save_security_flag() {
+    EEPROM_write(0x0E, security_sys);
 }
